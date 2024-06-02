@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+
+{% block title %}Register{% endblock %}
+
+{% block content %}
+
+<div class="center">
+    <form action="" method="POST">
+        <label for="name">Name: </label> <br>
+        <input type="text" name="name" placeholder="Enter your name"> <br>
+        <label for="password">Password: </label> <br>
+        <input type="password" name="password" id="password" placeholder="Password"> <br> <br>
+        <button type="submit">Register</button>
+        <p id="error" style="color:red;">{{ error }}</p>
+    </form>
+</div>
+
+{% endblock %}

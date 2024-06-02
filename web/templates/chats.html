@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block title %}Chats{% endblock %}
+
+{% block content %}
+
+<div>
+    <div class="center">
+        <h1>Chats</h1>
+        <div class="chats">
+            <ul>
+                {% for chat in chats %}
+                    <li>
+                        {% if chat.is_joke %}
+                        <a href="{{ url_for('jokechat', id=chat.id) }}">{{ chat.name }}{% if chat.is_joker %} - Joker {% endif %}</a> | <a href="{{ url_for('chat_delete', id=chat.id)}}">Delete</a>
+                        {% else %}
+                        <a href="{{ url_for('chat', id=chat.id) }}">{{ chat.name }}{% if chat.is_joker %} - Joker {% endif %}</a> | <a href="{{ url_for('chat_delete', id=chat.id)}}">Delete</a>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <a href="{{ url_for('create_chat') }}">Create</a>
+        <a href="{{ url_for('create_joker') }}">Create Joker</a>
+    </div>
+</div>
+
+{% endblock %}

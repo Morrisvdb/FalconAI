@@ -4,3 +4,10 @@
 /Scripts
 /share
 pyvenv.cfg
+/data
+/models
+/var
+/trained_models
+/web/__pycache__
+/__pycache__
+/joker_models

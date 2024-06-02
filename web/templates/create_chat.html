@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block title %}Create Chat{% endblock %}
+
+{% block content %}
+
+<div>
+    <div class="center">
+        <h1>Create Chat</h1>
+        <form action="{{ url_for('create_chat') }}" method="post">
+            <label for="name">Name: </label>
+            <input type="text" name="name" id="name" placeholder="Chat Name"> <br>
+            <label for="model">Model*: </label>
+            <select name="model" id="model"> 
+                {% for model in chat_models %}
+                    <option value="{{ model }}">{{ model }}</option>
+                {% endfor %}
+            </select> <br>
+            <button type="submit">Create</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

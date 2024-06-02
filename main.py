@@ -1,27 +1,54 @@
-import torch, tqdm, csv, json, os, numpy as np
+import torch, tqdm, csv, json, os, numpy as np, math, logging, uuid, warnings
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, AdamW
 from torch.utils.data import Dataset, DataLoader
+from sklearn.model_selection import train_test_split
+from generate import generate
 
-BATCH_SIZE = 16*16
-EPOCHS = 1
-LEARNING_RATE = 3e-5
+def get_unique_model_name():
+    return str(uuid.uuid4())
+
+BATCH_SIZE = 16
+BATCH_SIZE = input(f"Enter batch size ({BATCH_SIZE}): ") or BATCH_SIZE
+try:
+    BATCH_SIZE = int(BATCH_SIZE)
+except ValueError:
+    print("Invalid batch size, aborting...")
+    exit()
+
+EPOCHS = 25
+EPOCHS = input(f"Enter number of epochs ({EPOCHS}): ") or EPOCHS
+try:
+    EPOCHS = int(EPOCHS)
+except ValueError:
+    print("Invalid number of epochs, aborting...")
+    exit()
+    
+LEARNING_RATE = 5e-6
 WARMUP_STEPS = 5000
 MAX_SEQ_LEN = 400
+MAX_LR = 1e-3
 
-import logging
+UNIQUE_MODEL_NAME = get_unique_model_name()
+
+
 logging.getLogger().setLevel(logging.CRITICAL)
 
-import warnings
 warnings.filterwarnings('ignore')
 
-device = 'cpu'
-if torch.cuda.is_available():
-    device = 'cuda'
-print(device)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Training model on: ", device)
+
+mode = input("Choose input mode (Text=t/CSV=c): ")
+if mode not in ['t', 'c']:
+    print("Invalid mode, aborting...")
+    exit()
+if mode == None:
+    mode = 'c'
     
-tokenizer = GPT2Tokenizer.from_pretrained('gpt2-medium')
-model = GPT2LMHeadModel.from_pretrained('gpt2-medium')
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+model = GPT2LMHeadModel.from_pretrained('gpt2')
 model = model.to(device)
+print("Model loaded")
 
 def choose_from_top(probs, n=5):
     ind = np.argpartition(probs, -n)[-n:]
@@ -31,102 +58,119 @@ def choose_from_top(probs, n=5):
     token_id = ind[choice][0]
     return int(token_id)
 
-
-
-class JokesDataset(Dataset):
-    def __init__(self, jokes_dataset_path = 'data/'):
+class MessageDataset(Dataset):
+    def __init__(self):
         super().__init__()
+        if mode == "c":
+            print("Running in CSV mode")
+            # dataset_path = os.path.join('data', 'shortjokes.csv')
+            dataset_path = os.path.join("data", 'trainingData.csv')
 
-        short_jokes_path = os.path.join('trainingData.csv')
-
-        self.joke_list = []
-        self.end_of_text_token = "<|endoftext|>"
-        
-        with open(short_jokes_path) as csv_file:
-            csv_reader = csv.reader(csv_file, delimiter=',')
+            self.data = []
+            self.end_of_text_token = "<|endoftext|>"
             
-            x = 0
-            for row in csv_reader:
-                joke_str = f"MESSAGE:{row[1]}{self.end_of_text_token}"
-                self.joke_list.append(joke_str)
+            with open(dataset_path, encoding='utf-8') as csv_file:
+                csv_reader = csv.reader(csv_file, delimiter=',')
+                
+                x = 0
+                for row in csv_reader:
+                    message = f"MESSAGE:{row[1]}{self.end_of_text_token}"
+                    self.data.append(message)
+        elif mode == "t":
+            print("Running in plain text mode")
+            dataset_path = os.path.join('data', 'trainingData.txt')
+            self.data = []
+            self.end_of_text_token = "<|endoftext|>"
+            with open(dataset_path, encoding='utf-8') as file:
+                data = file.read()
+                for message in data:
+                    message = f"MESSAGE:{message}{self.end_of_text_token}"
+                    self.data.append(message)
         
     def __len__(self):
-        return len(self.joke_list)
+        return len(self.data)
 
     def __getitem__(self, item):
-        return self.joke_list[item]
+        return self.data[item]
 
-dataset = JokesDataset()
-# dataset = MessagesDataset()
-joke_loader = DataLoader(dataset, batch_size=1, shuffle=True)
+dataset = MessageDataset()
+dataLoader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+print("Created Dataset and DataLoader")
 
+train_data, val_data = train_test_split(dataset, test_size=0.2, random_state=42)
+
+trainLoader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
+valLoader = DataLoader(val_data, batch_size=BATCH_SIZE, shuffle=True)
+
+best_val_loss = float('inf')
+early_stopping_counter = 0
+EARLY_STOPPING_PATIENCE = 5
 
 device = 'cpu'
 if torch.cuda.is_available():
     device = 'cuda'
     
 model = model.to(device)
-model.train()
-optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
-# scheduler = WarmupLinearSchedule(optimizer, warmup_steps=WARMUP_STEPS, t_total = -1)
-proc_seq_count = 0
-sum_loss = 0.0
-batch_count = 0
+optimizer = AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
+scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=MAX_LR, steps_per_epoch=len(trainLoader), epochs=EPOCHS)
 
-tmp_jokes_tens = None
 models_folder = "trained_models"
 if not os.path.exists(models_folder):
     os.mkdir(models_folder)
+print("Starting training")
+
 
 for epoch in range(EPOCHS):
-    
+    model.train()
     print(f"EPOCH {epoch} started" + '=' * 30)
     
-    progress_bar = tqdm.tqdm(enumerate(joke_loader), total=len(joke_loader))
-    
-    for idx,joke in progress_bar:
-        
-        #################### "Fit as many joke sequences into MAX_SEQ_LEN sequence as possible" logic start ####
-        joke_tens = torch.tensor(tokenizer.encode(joke[0])).unsqueeze(0).to(device)
-        #Skip sample from dataset if it is longer than MAX_SEQ_LEN
-        if joke_tens.size()[1] > MAX_SEQ_LEN:
+    progress_bar = tqdm.tqdm(enumerate(trainLoader), total=len(trainLoader))
+    for idx,message in progress_bar:
+        tens = torch.tensor(tokenizer.encode(message[0])).unsqueeze(0).to(device)
+        if tens.size()[1] > MAX_SEQ_LEN:
             continue
         
-        #The first joke sequence in the sequence
-        if not torch.is_tensor(tmp_jokes_tens):
-            tmp_jokes_tens = joke_tens
-            continue
-        else:
-            #The next joke does not fit in so we process the sequence and leave the last joke 
-            #as the start for next sequence 
-            if tmp_jokes_tens.size()[1] + joke_tens.size()[1] > MAX_SEQ_LEN:
-                work_jokes_tens = tmp_jokes_tens
-                tmp_jokes_tens = joke_tens
-            else:
-                #Add the joke to sequence, continue and try to add more
-                tmp_jokes_tens = torch.cat([tmp_jokes_tens, joke_tens[:,1:]], dim=1)
-                continue
-        ################## Sequence ready, process it trough the model ##################
-            
-        outputs = model(work_jokes_tens, labels=work_jokes_tens)
+        outputs = model(tens, labels=tens)
         loss, logits = outputs[:2]                        
         loss.backward()
-        sum_loss = sum_loss + loss.detach().data
-                       
-        proc_seq_count = proc_seq_count + 1
-        if proc_seq_count == BATCH_SIZE:
-            proc_seq_count = 0    
-            batch_count += 1
-            optimizer.step()
-            # scheduler.step() 
-            optimizer.zero_grad()
-            model.zero_grad()
+        optimizer.step()
+        optimizer.zero_grad()
+        model.zero_grad()
 
-        if batch_count == 100:
-            print(f"sum loss {sum_loss}")
-            batch_count = 0
-            sum_loss = 0.0
-    
-    # Store the model after each epoch to compare the performance of them
-    model.save_pretrained(models_folder, f"gpt2_medium_joker_{epoch}")
-          
+        scheduler.step()
+
+    model.eval()
+    val_loss = 0
+    with torch.no_grad():
+        for idx, message in enumerate(valLoader):
+            tens = torch.tensor(tokenizer.encode(message[0])).unsqueeze(0).to(device)
+            if tens.size()[1] > MAX_SEQ_LEN:
+                continue
+            outputs = model(tens, labels=tens)
+            loss, logits = outputs[:2]
+            val_loss += loss.item()
+
+    avg_val_loss = val_loss / len(valLoader)
+    # avg_val_loss = val_loss
+    print(f'Validation Loss: {avg_val_loss}')
+    print(generate(prompt="Hello there, how are you doing?", model=model))
+
+    if avg_val_loss < best_val_loss:
+        best_val_loss = avg_val_loss
+        model.save_pretrained(os.path.join(models_folder, UNIQUE_MODEL_NAME, 'best_model'))
+        early_stopping_counter = 0
+    else:
+        early_stopping_counter += 1
+        if early_stopping_counter >= EARLY_STOPPING_PATIENCE:
+            # break
+            pass
+
+    # Save model every 3 epochs
+    if epoch % 3 == 0:
+        model.save_pretrained(os.path.join(models_folder, UNIQUE_MODEL_NAME, f'epoch_{epoch}'))
+
+
+model.save_pretrained(os.path.join(models_folder, UNIQUE_MODEL_NAME, 'final_model'))
+# model.load_state_dict(torch.load(os.path.join(models_folder, 'best_model')))
+print("Training finished")
+print("Exiting program...")

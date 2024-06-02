@@ -1,0 +1,14 @@
+<link rel="stylesheet" href="{{ url_for('static', filename='stylesheet.css') }}">
+<script src="https://unpkg.com/htmx.org@1.6.1"></script>
+
+<title>{% block title %}{% endblock %}</title>
+<body class="body">
+    <div class="navbar" id="navbar">
+        <a href="{{ url_for('chats') }}">Chats</a>
+        <a href="{{ url_for('logout') }}" id="navbar_right">Logout</a>
+    </div>
+
+    {% block content %} {% endblock %}
+</body>
+
+{% block scripts %} {% endblock %}

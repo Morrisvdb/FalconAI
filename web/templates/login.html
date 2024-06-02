@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+
+<div class="center">
+    <form id="login-form" method="POST">
+        <label for="name">Name: </label> <br>
+        <input type="text" name="name" placeholder="Enter your name"> <br>
+        <label for="password">Password: </label> <br>
+        <input type="password" name="password" id="password" placeholder="Password"> <br>
+        <label for="remember">Remember Me: </label>
+        <input type="checkbox" name="remember" id="remember"> <br>
+        <button type="submit">Login</button> <br>
+        <a href="{{ url_for('register') }}">Register</a>
+    </form>
+    <p id="error" style="color:red;">{{ error }}</p>
+</div>
+
+{% endblock %}

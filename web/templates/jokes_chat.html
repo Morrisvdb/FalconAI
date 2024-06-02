@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="center">
+    <h2>WARNING: JOKES MAY BE OFFENSIVE</h2>
+    <div class="output">
+        <div id="chat" hx-get="/chat/{{ chat_id }}/get" hx-trigger="load"></div>
+    </div>
+    <div class="center-spinner" id="loading-spinner" style="display:none;">
+        <div class=spinner></div>
+    </div>
+    <div class="input">
+        <form
+        id="inputform"
+        hx-post="{{ url_for('post_joke', id=chat_id) }}"
+        hx-trigger="submit"
+        hx-target="#chat"
+        hx-swap="innerHTML"
+        hx-on:submit-success="document.getElementById('message').value='';"
+        >
+            <input type="number" name="count" id="count" placeholder="Amount to generate...">
+            <button type="submit">Send</button>
+            
+        </form>
+        
+    </div>
+</div>
+
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        const form = document.querySelector("#inputform");
+        form.reset();
+    });
+</script>
+<script>
+    document.body.addEventListener('htmx:beforeRequest', function(evt) {
+        console.log('Requesting', evt.detail.target);
+        startLoading();
+    });
+
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+        console.log('Request complete', evt.detail.target);
+        stopLoading();
+    });
+    function startLoading() {
+        document.getElementById('loading-spinner').style.display = 'block';
+    }
+    
+    function stopLoading() {
+        document.getElementById('loading-spinner').style.display = 'none';
+    }
+
+    
+</script>
+{% endblock %}
+
