@@ -140,3 +140,8 @@
     padding: 10px;
 
 }
+
+.dataset iframe {
+    border: 1px solid #e7e7e7;
+    height: auto;
+  }

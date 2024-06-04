@@ -123,7 +123,6 @@ def generate_with_history(prompt, history):
 
                     return output_text.split("<|endoftext|>")[0]
 
-
 def generate_jokes(count, model):
     model = GPT2LMHeadModel.from_pretrained(os.path.join('models', 'Jokes', model)).to(device)
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')

@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <div class="center">
+        <h1>Jokes Dataset</h1>
+        {% for dataset in datasets %}
+            <div class="dataset">
+                <h2>{{ dataset.name }}</h2>
+                <p>{{ dataset.description }}</p>
+                <iframe src="{{ url_for('get_humanized_dataset', id=dataset.id)}}" frameborder="0" width="40%" height="20%"></iframe>
+                <a href="{{ url_for('download_dataset', id=dataset.id) }}" download="">Download</a>
+                FIX THIS MAYBE
+            </div>
+        {% endfor %}
+    </div>
+{% endblock %}

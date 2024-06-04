@@ -1,8 +1,8 @@
-from flask import jsonify, render_template, request, redirect, url_for
+from flask import jsonify, render_template, request, redirect, url_for, send_file
 from __init__ import app, db, login_manager
 from models import User, Chat, Message
 from flask_login import login_user, login_required, current_user, logout_user
-import json, numpy as np, time, os
+import json, numpy as np, time, os, csv
 from generate import generate, generate_with_history, generate_jokes
 
 def choose_from_top(probs, n=5):
@@ -165,6 +165,46 @@ def chat_delete(id):
             db.session.commit()
     return redirect(url_for('chats'))
 
+@app.route('/datasets')
+def datasets():
+    datasets = os.listdir('datasets')
+    datasets_dict = []
+    for id, dataset in enumerate(datasets):
+        datasets_dict.append({
+            'name': dataset,
+            'id': id,
+            'size': os.path.getsize(os.path.join('datasets', dataset))
+        })
+
+    return render_template('datasets.html', datasets=datasets_dict)
+
+# @app.route('/dataset/<int:id>')
+# def get_dataset(id):
+#     path = os.path.join('datasets', os.listdir('datasets')[id])
+#     print(path)
+#     return send_from_directory(path, 'dataset.csv')
+
+@app.route('/dataset/download/<int:id>')
+def download_dataset(id):
+    path = os.path.join(os.getcwd(), 'datasets', os.listdir('datasets')[id])
+    print(path)
+    
+    return send_file(path, as_attachment=True, download_name=os.listdir('datasets')[id])
+
+@app.route('/dataset/humanized/<int:id>')
+def get_humanized_dataset(id):
+    with open(os.path.join('datasets', os.listdir('datasets')[id]), 'r', encoding='utf-8') as file:
+        data_reader = csv.reader(file, delimiter=',')
+        data = []
+        for row in data_reader:
+            data.append(row)
+
+        output = ""
+        for i in range(1, 101):
+            output += f"Joke {i}: {data[i][1]}<br>"
+
+    return output
+
 
 @app.route('/logout')
 @login_required
@@ -174,7 +214,7 @@ def logout():
 
 
 if __name__ == '__main__':
-    # app.run(host='0.0.0.0', ssl_context='adhoc')
-    app.run(host="0.0.0.0", port=5000)
+    # app.run(host='0.0.0.0', ssl_context='adhoc', debug=True)
+    app.run(port=5001, debug=True)
     
     # 195.240.271.189
